@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prasetyo Aji - Tugas Hacktiv</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/png" href="MBG-logo.png" />
+</head>
+<body>
+  <main class="chat-container">
+    <header class="chat-header">
+      <div class="avatar"><img src="MBG-logo.png" alt="Logo Mulai Bot Gratiz" /></div>
+      <div class="title">
+        <h1>Mulai Bot Gratiz</h1>
+        <p>Sahabat MBG • Gemini 2.5 Flash</p>
+      </div>
+      <button id="clear-btn" type="button" title="Mulai percakapan baru">🗑️ Reset</button>
+    </header>
+
+    <div id="chat-box" class="chat-box" aria-live="polite"></div>
+
+    <div class="suggestions" id="suggestions">
+      <button type="button" data-q="Jelaskan apa itu AI dengan bahasa sederhana">Apa itu AI?</button>
+      <button type="button" data-q="Beri tips belajar yang efektif untuk mahasiswa">Tips Belajar</button>
+      <button type="button" data-q="Bantu aku bikin jadwal belajar mingguan">Jadwal Belajar</button>
+      <button type="button" data-q="Apa bedanya list dan tuple di Python?">Tanya Python</button>
+    </div>
+
+    <form id="chat-form" class="chat-form" autocomplete="off">
+      <input type="text" id="user-input" placeholder="Tanya apa saja..." required />
+      <button type="submit" id="send-btn">Kirim</button>
+    </form>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

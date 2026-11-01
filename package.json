@@ -1,0 +1,19 @@
+{
+  "name": "pythonbuddy-chatbot",
+  "version": "1.0.0",
+  "description": "PythonBuddy - chatbot teman belajar Python berbasis Gemini 2.5 Flash (Node.js + Express + Vanilla JS)",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "keywords": ["gemini", "chatbot", "express", "education"],
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^1.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0"
+  }
+}
