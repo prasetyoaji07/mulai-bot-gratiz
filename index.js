@@ -12,16 +12,17 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 const PORT = process.env.PORT || 3000;
 const MAX_HISTORY = 20; // jumlah pesan terakhir yang dikirim ke model (memory percakapan)
+const MAX_CHARS = 2000; // batas panjang tiap pesan agar kuota API tidak boros
 
-// ===== Use case: PythonBuddy - teman belajar Python untuk pemula =====
+// ===== Use case: Mulai Bot Gratiz - asisten gizi dan makan sehat =====
 const SYSTEM_INSTRUCTION = `
 Kamu adalah "Mulai Bot Gratiz", asisten AI bertema gizi dan makan sehat yang dibuat oleh Prasetyo Aji.
 
 Persona & gaya bahasa:
-- Jika ditanya siapa kamu, jawab bahwa kamu Mulai Bot Gratiz, sahabat MBG buatan Prasetyo Aji rajin sedekan dan rajin ibadah.
+- Jika ditanya siapa kamu, jawab bahwa kamu Mulai Bot Gratiz, sahabat MBG buatan Prasetyo Aji.
 - Jawab dalam Bahasa Indonesia yang santai tapi sopan, ramah, boleh emoji secukupnya.
 
 Aturan menjawab:
@@ -32,18 +33,24 @@ Aturan menjawab:
 - Jawaban ringkas dan terstruktur (maksimal sekitar 250 kata).
 `.trim();
 
-// ===== Helper: coba ulang otomatis jika Gemini sibuk (503) atau kena batas sementara (429) =====
-async function generateWithRetry(params, maxAttempts = 3) {
+// ===== Helper: buka stream Gemini, coba ulang jika sibuk (503) atau kena batas (429) =====
+// Mengembalikan iterator dan potongan pertama, supaya error awal bisa dicoba ulang
+// sebelum ada teks yang dikirim ke browser.
+async function openStream(params, maxAttempts = 3) {
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await ai.models.generateContent(params);
+      const stream = await ai.models.generateContentStream(params);
+      const it = stream[Symbol.asyncIterator]();
+      const first = await it.next();
+      return { it, first };
     } catch (e) {
       lastError = e;
       const msg = String(e?.message || '');
       const sementara =
         msg.includes('"code":503') || msg.includes('"code":429') || msg.includes('UNAVAILABLE');
       if (!sementara || attempt === maxAttempts) break;
+      console.warn(`Gemini sibuk, coba lagi (percobaan ${attempt}/${maxAttempts})...`);
       await new Promise((r) => setTimeout(r, attempt * 2000)); // tunggu 2 detik, lalu 4 detik
     }
   }
@@ -60,9 +67,10 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', model: GEMINI_MODEL });
 });
 
-// ===== Endpoint chat (multi-turn) =====
+// ===== Endpoint chat (multi-turn, streaming) =====
 app.post('/api/chat', async (req, res) => {
   const { conversation } = req.body ?? {};
+  let started = false; // sudah mulai mengirim teks ke browser?
 
   try {
     if (!Array.isArray(conversation) || conversation.length === 0) {
@@ -89,28 +97,53 @@ app.post('/api/chat', async (req, res) => {
 
     const contents = history.map(({ role, text }) => ({
       role,
-      parts: [{ text }],
+      parts: [{ text: text.slice(0, MAX_CHARS) }],
     }));
 
-    const response = await generateWithRetry({
-      model: GEMINI_MODEL,
-      contents,
-      config: {
-        temperature: 0.7, // cukup kreatif untuk analogi, tetap akurat untuk kode
-        topP: 0.9,
-        topK: 40,
-        systemInstruction: SYSTEM_INSTRUCTION,
-      },
-    });
-
-    const text = response.text;
-    if (!text) {
-      return res.status(502).json({ error: 'Model tidak mengembalikan jawaban. Coba ulangi pertanyaanmu.' });
+    const config = {
+      temperature: 0.7, // cukup kreatif untuk ide menu, tetap akurat
+      topP: 0.9,
+      topK: 40,
+      systemInstruction: SYSTEM_INSTRUCTION,
+    };
+    // Matikan "thinking" pada seri 2.5 Flash supaya jawaban lebih cepat
+    if (GEMINI_MODEL.includes('2.5-flash')) {
+      config.thinkingConfig = { thinkingBudget: 0 };
     }
 
-    res.status(200).json({ result: text });
+    const mulai = Date.now();
+    const { it, first } = await openStream({ model: GEMINI_MODEL, contents, config });
+    console.log(`Potongan pertama tiba dalam ${((Date.now() - mulai) / 1000).toFixed(1)} detik`);
+
+    let r = first;
+    while (!r.done) {
+      const teks = r.value?.text;
+      if (teks) {
+        if (!started) {
+          res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+          });
+          started = true;
+        }
+        res.write(teks);
+      }
+      r = await it.next();
+    }
+
+    if (!started) {
+      return res.status(502).json({ error: 'Model tidak mengembalikan jawaban. Coba ulangi pertanyaanmu.' });
+    }
+    res.end();
+    console.log(`Jawaban selesai dalam ${((Date.now() - mulai) / 1000).toFixed(1)} detik`);
   } catch (e) {
     console.error('Gemini error:', e?.message || e);
+    if (started) {
+      // sudah terlanjur mengirim sebagian jawaban
+      res.write('\n\n(Jawaban terputus. Coba kirim ulang ya.)');
+      return res.end();
+    }
     const sibuk = String(e?.message || '').includes('"code":503');
     res.status(sibuk ? 503 : 500).json({
       error: sibuk
@@ -124,5 +157,5 @@ app.listen(PORT, () => {
   if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.startsWith('isi_api_key')) {
     console.warn('⚠️  GEMINI_API_KEY belum diisi di file .env');
   }
-  console.log(`PythonBuddy Chatbot running on http://localhost:${PORT}`);
+  console.log(`Mulai Bot Gratiz running on http://localhost:${PORT} (model: ${GEMINI_MODEL})`);
 });

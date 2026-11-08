@@ -1,7 +1,6 @@
 {
-  "name": "pythonbuddy-chatbot",
-  "version": "1.0.0",
-  "description": "PythonBuddy - chatbot teman belajar Python berbasis Gemini 2.5 Flash (Node.js + Express + Vanilla JS)",
+   "name": "mulai-bot-gratiz",
+  "description": "Mulai Bot Gratiz - chatbot gizi berbasis Gemini API (Node.js + Express + Vanilla JS)",
   "main": "index.js",
   "type": "module",
   "scripts": {

@@ -8,8 +8,8 @@ const suggestions = document.getElementById('suggestions');
 // Memory percakapan (dikirim utuh ke backend tiap request)
 let conversation = [];
 
-   const WELCOME =
-     'Halo! 👋 Aku **Mulai Bot Gratiz**, asisten AI kamu. Tanya apa saja, aku siap bantu!';
+const WELCOME =
+  'Halo! 👋 Aku **Mulai Bot Gratiz**, sahabat MBG. Tanya seputar gizi dan menu makan sehat ya!';
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -72,11 +72,22 @@ async function sendMessage(userMessage) {
       throw new Error(err?.error || response.statusText);
     }
 
-    const data = await response.json();
-    if (data && data.result) {
+    // Baca jawaban sedikit demi sedikit (streaming)
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      fullText += decoder.decode(value, { stream: true });
       botMsg.classList.remove('typing');
-      botMsg.innerHTML = formatMarkdown(data.result);
-      conversation.push({ role: 'model', text: data.result });
+      botMsg.innerHTML = formatMarkdown(fullText);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    if (fullText.trim()) {
+      conversation.push({ role: 'model', text: fullText });
     } else {
       botMsg.classList.remove('typing');
       botMsg.classList.add('error');
